@@ -17,15 +17,42 @@ def is_visible(element):
     return True
 
 
+class CustomDummyCache():
+    """
+    there is another interesting approach though:
+    you can ask Cache object directly for a url content,
+    and if we don't have it in cache - it is the cache who will make a request to fetch it,
+    but I find it a bit perverted from control reversion and incapsulation point of view
+
+    also, usually you calculate an e.g. md5 hashes from your urls and use it as cache keys
+    yeeeeah and Redis and expiring mechanism that makes all of it super fun an buggy
+    """
+    def __init__(self):
+        self.storage = {}
+
+    def is_cached(self, url):
+        return url in self.storage
+
+    def get(self, url):
+        print('using cache!')
+        return self.storage.get(url)
+
+    def store(self, url, content_type, data):
+        self.storage[url] = {'content_type': content_type, 'data': data}
+
+
 class CustomServer(Server):
-    def __init__(self, host, port, site):
-        self.host, self.port, self.site = host, port, site
+    def __init__(self, host, port, site, use_cache):
+        self.host, self.port, self.site, self.use_cache = host, port, site, use_cache
         super(CustomServer, self).__init__(self.host, self.port, use_reloader=True)
 
     def __call__(self, app):
         server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': True, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
         app.host, app.port, app.site = self.host, self.port, self.site
+        if self.use_cache:
+            app.use_cache = True
+            app.cache = CustomDummyCache()
         return Server.__call__(self, app, **server_args)
 
 
@@ -35,15 +62,16 @@ class ArgumentsParser(Command):
         Option('--host', '-h', dest='host', default='127.0.0.1'),
         Option('--port', '-p', dest='port', default=5000, type=int),
         Option('--site', '-s', dest='site', default='habrahabr.ru'),
+        Option('--cache', '-c', dest='use_cache', default=False, action='store_true'),
     )
 
-    def run(self, host, port, site):
+    def run(self, host, port, site, use_cache):
         from ipdb import launch_ipdb_on_exception
 
         with launch_ipdb_on_exception():
             if not urlsplit(site).scheme:
                 site = 'http://' + site
-            CustomServer(host, port, site)(app)
+            CustomServer(host, port, site, use_cache)(app)
 
 
 what_to_add = u"\u2122"
@@ -57,10 +85,17 @@ manager = Manager(app)
 def index(path):
     url = urljoin(app.site, path)
     regexp = re.compile('([^\W\d]{6,})', re.UNICODE)
+
+    if app.use_cache and app.cache.is_cached(url):
+        cached = app.cache.get(url)
+        return Response(cached['data'], mimetype=cached['content_type'])
+
     resp = requests.get(url)
     if resp.headers.get('Content-Type') and 'text/html' not in resp.headers.get('Content-Type'):
-        print(url, resp.headers.get('Content-Type'))
+        if app.use_cache:
+            app.cache.store(url, resp.headers.get('Content-Type'), resp.content)
         return Response(resp.content, mimetype=resp.headers.get('Content-Type'))
+
     soup = BeautifulSoup(resp.text, "html.parser")
     strings = soup.findAll(string=regexp)
     visible_strings = filter(is_visible, strings)
@@ -80,7 +115,10 @@ def index(path):
             uri = url_parts.path + ('?' + url_parts.query if url_parts.query else '')
             link['href'] = urljoin(proxy_domain, uri)
 
-    return str(soup)
+    content = str(soup)
+    if app.use_cache:
+        app.cache.store(url, 'text/html', content)
+    return content
 
 
 manager.add_command('runserver', ArgumentsParser())
