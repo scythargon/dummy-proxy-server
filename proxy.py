@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from flask import Flask
+from flask import Flask, request
 from bs4 import BeautifulSoup
 import requests
 import re
 
 
 app = Flask(__name__)
+
 
 def is_visible(element):
     if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
@@ -17,10 +18,14 @@ def is_visible(element):
     return True
 
 
-@app.route("/")
-def index():
-    url = 'https://habrahabr.ru/'
-    what_to_add = u"\u2122"
+site = 'https://habrahabr.ru/'
+what_to_add = u"\u2122"
+
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def index(path):
+    url = site + path
     regexp = re.compile('([^\W\d]{6,})', re.UNICODE)
     resp = requests.get(url)
     soup = BeautifulSoup(resp.text, "html.parser")
