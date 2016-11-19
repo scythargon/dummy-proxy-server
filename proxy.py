@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from flask import Flask, request
-from flask_script import Manager, Server
+from flask import Flask, request, Response
+from flask_script import Manager, Server, Command, Option
 from bs4 import BeautifulSoup
 import requests
 import re
 import webbrowser
+from urlparse import urljoin
 
 
 def is_visible(element):
@@ -17,12 +18,34 @@ def is_visible(element):
 
 
 class CustomServer(Server):
-    def __call__(self, app, *args, **kwargs):
-        webbrowser.open('http://127.0.0.1:5000/')
-        return Server.__call__(self, app, *args, **kwargs)
+    def __init__(self, host, port, site):
+        self.host, self.port, self.site = host, port, site
+        super(CustomServer, self).__init__(self.host, self.port, use_reloader=True)
+
+    def __call__(self, app):
+        server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': True, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
+        webbrowser.open('http://%s:%s/' % (self.host, self.port))
+        app.site = self.site
+        return Server.__call__(self, app, **server_args)
 
 
-site = 'https://habrahabr.ru/'
+class ArgumentsParser(Command):
+
+    option_list = (
+        Option('--host', '-h', dest='host', default='127.0.0.1'),
+        Option('--port', '-p', dest='port', default=5000, type=int),
+        Option('--site', '-s', dest='site', default='habrahabr.ru'),
+    )
+
+    def run(self, host, port, site):
+        from ipdb import launch_ipdb_on_exception
+
+        with launch_ipdb_on_exception():
+            if not site.startswith('http'):
+                site = 'http://' + site
+            CustomServer(host, port, site)(app)
+
+
 what_to_add = u"\u2122"
 
 app = Flask(__name__)
@@ -32,11 +55,12 @@ manager = Manager(app)
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def index(path):
-    url = site + path
+    url = urljoin(app.site, path)
     regexp = re.compile('([^\W\d]{6,})', re.UNICODE)
     resp = requests.get(url)
     if resp.headers.get('Content-Type') and 'text/html' not in resp.headers.get('Content-Type'):
-        return resp.content
+        print(url, resp.headers.get('Content-Type'))
+        return Response(resp.content, mimetype=resp.headers.get('Content-Type'))
     soup = BeautifulSoup(resp.text, "html.parser")
     strings = soup.findAll(string=regexp)
     visible_strings = filter(is_visible, strings)
@@ -46,7 +70,7 @@ def index(path):
     return str(soup)
 
 
-manager.add_command('runserver', CustomServer(use_reloader=True))
+manager.add_command('runserver', ArgumentsParser())
 
 
 if __name__ == '__main__':
