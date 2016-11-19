@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import requests
 import re
 import webbrowser
-from urlparse import urljoin
+from urlparse import urljoin, urlsplit
 
 
 def is_visible(element):
@@ -25,7 +25,7 @@ class CustomServer(Server):
     def __call__(self, app):
         server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': True, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
-        app.site = self.site
+        app.host, app.port, app.site = self.host, self.port, self.site
         return Server.__call__(self, app, **server_args)
 
 
@@ -41,7 +41,7 @@ class ArgumentsParser(Command):
         from ipdb import launch_ipdb_on_exception
 
         with launch_ipdb_on_exception():
-            if not site.startswith('http'):
+            if not urlsplit(site).scheme:
                 site = 'http://' + site
             CustomServer(host, port, site)(app)
 
@@ -67,6 +67,19 @@ def index(path):
     for string in visible_strings:
         new_string = re.sub(regexp, '\g<0>%s' % what_to_add, string)
         string.replace_with(new_string)
+
+    site_domain = urlsplit(app.site).netloc
+    proxy_domain = 'http://%s:%s/' % (app.host, app.port)
+    for link in soup.find_all('a'):
+        if not link.get('href'):
+            continue
+        if not urlsplit(link['href']).scheme:
+            link['href'] = urljoin(proxy_domain, link['href'])
+        elif site_domain == urlsplit(link['href']).netloc:
+            url_parts = urlsplit(link['href'])
+            uri = url_parts.path + ('?' + url_parts.query if url_parts.query else '')
+            link['href'] = urljoin(proxy_domain, uri)
+
     return str(soup)
 
 
