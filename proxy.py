@@ -44,10 +44,10 @@ class CustomDummyCache():
 class CustomServer(Server):
     def __init__(self, host, port, site, use_cache):
         self.host, self.port, self.site, self.use_cache = host, port, site, use_cache
-        super(CustomServer, self).__init__(self.host, self.port, use_reloader=True)
+        super(CustomServer, self).__init__(self.host, self.port, use_reloader=False)
 
     def __call__(self, app):
-        server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': True, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
+        server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': False, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
         app.host, app.port, app.site = self.host, self.port, self.site
         if self.use_cache:
@@ -66,12 +66,9 @@ class ArgumentsParser(Command):
     )
 
     def run(self, host, port, site, use_cache):
-        from ipdb import launch_ipdb_on_exception
-
-        with launch_ipdb_on_exception():
-            if not urlsplit(site).scheme:
-                site = 'http://' + site
-            CustomServer(host, port, site, use_cache)(app)
+        if not urlsplit(site).scheme:
+            site = 'http://' + site
+        CustomServer(host, port, site, use_cache)(app)
 
 
 what_to_add = u"\u2122"
