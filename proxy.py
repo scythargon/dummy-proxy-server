@@ -49,9 +49,8 @@ class CustomServer(Server):
     def __call__(self, app):
         server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': False, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
-        app.host, app.port, app.site = self.host, self.port, self.site
+        app.host, app.port, app.site, app.use_cache = self.host, self.port, self.site, self.use_cache
         if self.use_cache:
-            app.use_cache = True
             app.cache = CustomDummyCache()
         return Server.__call__(self, app, **server_args)
 
