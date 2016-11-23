@@ -14,6 +14,8 @@ from flask_script import Command, Manager, Option, Server
 
 import requests
 
+from w3lib.html import replace_entities
+
 
 def is_visible(element):
     if element.parent.name in ['style', 'script', '[document]', 'head',
@@ -132,7 +134,7 @@ def index(path):
                 ('?' + url_parts.query if url_parts.query else '')
             link['href'] = urljoin(proxy_domain, uri)
 
-    content = str(soup)
+    content = replace_entities(str(soup))
     if app.use_cache:
         app.cache.store(url, 'text/html', content)
     return content
