@@ -52,15 +52,15 @@ class CustomDummyCache():
 
 
 class CustomServer(Server):
-    def __init__(self, host, port, site, use_cache):
-        self.host, self.port, self.site, self.use_cache = host, port, site, \
-            use_cache
+    def __init__(self, host, port, site, use_cache, with_reloader):
+        self.host, self.port, self.site, self.use_cache, self.with_reloader = \
+            host, port, site, use_cache, with_reloader
         super(CustomServer, self).__init__(self.host, self.port,
-                                           use_reloader=False)
+                                           use_reloader=with_reloader)
 
     def __call__(self, app):
         server_args = {'processes': 1, 'threaded': False, 'use_debugger': True,
-                       'use_reloader': False, 'host': self.host,
+                       'use_reloader': self.with_reloader, 'host': self.host,
                        'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
         app.host, app.port, app.site, app.use_cache = self.host, self.port, \
@@ -78,16 +78,17 @@ class ArgumentsParser(Command):
         Option('--site', '-s', dest='site', default='habrahabr.ru'),
         Option('--cache', '-c', dest='use_cache', default=False,
                action='store_true'),
+        Option('--reloader', '-r', dest='with_reloader', default=False,
+               action='store_true'),
     )
 
-    def run(self, host, port, site, use_cache):
+    def run(self, host, port, site, use_cache, with_reloader):
         if not urlsplit(site).scheme:
             site = 'http://' + site
-        CustomServer(host, port, site, use_cache)(app)
+        CustomServer(host, port, site, use_cache, with_reloader)(app)
 
 
 what_to_add = u"\u2122"
-
 app = Flask(__name__)
 manager = Manager(app)
 
@@ -96,7 +97,7 @@ manager = Manager(app)
 @app.route('/<path:path>')
 def index(path):
     url = urljoin(app.site, path)
-    regexp = re.compile('([^\W\d]{6,})', re.UNICODE)
+    regexp = re.compile('(^|\s)([^\W\d]{6})($|\s)', re.UNICODE)
 
     if app.use_cache and app.cache.is_cached(url):
         cached = app.cache.get(url)
@@ -115,7 +116,7 @@ def index(path):
     strings = soup.findAll(string=regexp)
     visible_strings = filter(is_visible, strings)
     for string in visible_strings:
-        new_string = re.sub(regexp, '\g<0>%s' % what_to_add, string)
+        new_string = re.sub(regexp, '\g<1>\g<2>%s\g<3>' % what_to_add, string)
         string.replace_with(new_string)
 
     site_domain = urlsplit(app.site).netloc
