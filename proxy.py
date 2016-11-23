@@ -1,16 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from flask import Flask, request, Response
-from flask_script import Manager, Server, Command, Option
-from bs4 import BeautifulSoup
-import requests
 import re
+
 import webbrowser
+
 from urlparse import urljoin, urlsplit
+
+from bs4 import BeautifulSoup
+
+from flask import Flask, Response
+
+from flask_script import Command, Manager, Option, Server
+
+import requests
 
 
 def is_visible(element):
-    if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
+    if element.parent.name in ['style', 'script', '[document]', 'head',
+                               'title']:
         return False
     elif element.__class__.__name__ == 'Comment':
         return False
@@ -21,11 +28,14 @@ class CustomDummyCache():
     """
     there is another interesting approach though:
     you can ask Cache object directly for a url content,
-    and if we don't have it in cache - it is the cache who will make a request to fetch it,
-    but I find it a bit perverted from control reversion and incapsulation point of view
+    and if we don't have it in cache - it is the cache who will make a request
+    to fetch it, but I find it a bit perverted from control reversion and
+    incapsulation point of view
 
-    also, usually you calculate an e.g. md5 hashes from your urls and use it as cache keys
-    yeeeeah and Redis and expiring mechanism that makes all of it super fun an buggy
+    also, usually you calculate an e.g. md5 hashes from your urls and use it as
+    cache keys
+    yeeeeah and Redis and expiring mechanism that makes all of it super fun and
+    buggy
     """
     def __init__(self):
         self.storage = {}
@@ -43,13 +53,18 @@ class CustomDummyCache():
 
 class CustomServer(Server):
     def __init__(self, host, port, site, use_cache):
-        self.host, self.port, self.site, self.use_cache = host, port, site, use_cache
-        super(CustomServer, self).__init__(self.host, self.port, use_reloader=False)
+        self.host, self.port, self.site, self.use_cache = host, port, site, \
+            use_cache
+        super(CustomServer, self).__init__(self.host, self.port,
+                                           use_reloader=False)
 
     def __call__(self, app):
-        server_args = {'processes': 1, 'threaded': False, 'use_debugger': True, 'use_reloader': False, 'host': self.host, 'passthrough_errors': False, 'port': self.port}
+        server_args = {'processes': 1, 'threaded': False, 'use_debugger': True,
+                       'use_reloader': False, 'host': self.host,
+                       'passthrough_errors': False, 'port': self.port}
         webbrowser.open('http://%s:%s/' % (self.host, self.port))
-        app.host, app.port, app.site, app.use_cache = self.host, self.port, self.site, self.use_cache
+        app.host, app.port, app.site, app.use_cache = self.host, self.port, \
+            self.site, self.use_cache
         if self.use_cache:
             app.cache = CustomDummyCache()
         return Server.__call__(self, app, **server_args)
@@ -61,7 +76,8 @@ class ArgumentsParser(Command):
         Option('--host', '-h', dest='host', default='127.0.0.1'),
         Option('--port', '-p', dest='port', default=5000, type=int),
         Option('--site', '-s', dest='site', default='habrahabr.ru'),
-        Option('--cache', '-c', dest='use_cache', default=False, action='store_true'),
+        Option('--cache', '-c', dest='use_cache', default=False,
+               action='store_true'),
     )
 
     def run(self, host, port, site, use_cache):
@@ -87,10 +103,13 @@ def index(path):
         return Response(cached['data'], mimetype=cached['content_type'])
 
     resp = requests.get(url)
-    if resp.headers.get('Content-Type') and 'text/html' not in resp.headers.get('Content-Type'):
+    if resp.headers.get('Content-Type') and \
+       'text/html' not in resp.headers.get('Content-Type'):
         if app.use_cache:
-            app.cache.store(url, resp.headers.get('Content-Type'), resp.content)
-        return Response(resp.content, mimetype=resp.headers.get('Content-Type'))
+            app.cache.store(url, resp.headers.get('Content-Type'),
+                            resp.content)
+        return Response(resp.content,
+                        mimetype=resp.headers.get('Content-Type'))
 
     soup = BeautifulSoup(resp.text, "html.parser")
     strings = soup.findAll(string=regexp)
@@ -108,7 +127,8 @@ def index(path):
             link['href'] = urljoin(proxy_domain, link['href'])
         elif site_domain == urlsplit(link['href']).netloc:
             url_parts = urlsplit(link['href'])
-            uri = url_parts.path + ('?' + url_parts.query if url_parts.query else '')
+            uri = url_parts.path + \
+                ('?' + url_parts.query if url_parts.query else '')
             link['href'] = urljoin(proxy_domain, uri)
 
     content = str(soup)
